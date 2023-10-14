@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from tqdm import tqdm
 from sklearn.linear_model import LinearRegression
 
 class DataPreparation:
@@ -45,27 +46,33 @@ class DataPreparation:
     def impute_numerical(self):
 
         nan_table = self.get_nan_table()
-        var_to_impute = nan_table[(nan_table['Type'] == 'Numérique') & (nan_table["Pourcentages de valeurs manquantes"] > 0)]['Variable'].to_list()
-        print(var_to_impute)
-        for var in var_to_impute:
+        var_to_impute = nan_table[(nan_table['Type'] == 'Numérique')
+                                       & (nan_table["Pourcentages de valeurs manquantes"] > 0)]['Variable'].to_list()
+
+        for var in tqdm(var_to_impute):
             index_NAN = self.df[self.df[var].isna()].index
             var_explicatives = []
 
             correlation_vector = self.get_variable_correlation(var)
             var_correlated = correlation_vector.index.to_list()
 
+            if 'ID' in var_correlated:
+                var_correlated.remove("ID")
+
             for colonne in var_correlated:
-                if self.df[colonne].loc[index_NAN].isna().sum() == 0 :
+                if self.df[colonne].loc[index_NAN].isna().sum() == 0:
                     var_explicatives.append(colonne)
-                    if len(var_explicatives) == 3 :
+                    if len(var_explicatives) == 3:
                         break
 
-            print(var_explicatives)
             df_train = self.df.dropna(how='any')
-            
+
             reg = LinearRegression().fit(df_train[var_explicatives], df_train[var])
             pred = reg.predict(self.df[var_explicatives].loc[index_NAN])
-            self.df[var].loc[index_NAN] = pred
+            self.df.loc[index_NAN, var] = pred
+
+            if var == 'Fuel consumption ':
+                self.df.loc[self.df['Fuel consumption '] <= 0, 'Fuel consumption '] = 0
 
 
     def impute_categorical(self):
