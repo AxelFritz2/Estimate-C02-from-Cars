@@ -1,91 +1,80 @@
 import pandas as pd
 import numpy as np
+from sklearn.experimental import enable_iterative_imputer
+from sklearn.impute import IterativeImputer
 from tqdm import tqdm
 from sklearn.linear_model import LinearRegression
 
+
 class DataPreparation:
-    def __init__(self, df):
-        self.df = df.copy()
+    def __init__(self, train, test):
+        self.train = train.copy()
+        self.test = test.copy()
 
+    def get_variable_correlation(self, variable):
+        correlation_vector = self.train[self.col_numericals].corr()[variable][:]
+        correlation_vector = np.abs(correlation_vector)
+        correlation_vector = correlation_vector.sort_values(ascending=False)[1:]
 
-    def get_type_list(self):
-        self.col_categoricals = self.df.select_dtypes(include = ['object']).columns.to_list()
-        self.col_numericals = self.df.select_dtypes(exclude = ["object"]).columns.to_list()
-        self.df["date"] = pd.to_datetime(self.df["Date of registration"])
-
-
-    def remove_outliers(self):
-        pass
-
-
+        return (correlation_vector)
 
     def get_nan_table(self):
         nan_table = pd.DataFrame(columns=["Variable", "Pourcentages de valeurs manquantes", "Type"])
 
-        for col in self.df:
-            pcentage = (self.df[col].isna().sum() / self.df.shape[0]) * 100
+        for col in self.train:
+            pcentage = (self.train[col].isna().sum() / self.train.shape[0]) * 100
             type = 'Numérique' if col in self.col_numericals else 'Catégorielle'
             nan_table.loc[len(nan_table)] = [col, pcentage, type]
 
-        nan_table = nan_table.sort_values(by=["Pourcentages de valeurs manquantes"], ascending=False).reset_index(drop=True)
+        nan_table = nan_table.sort_values(by=["Pourcentages de valeurs manquantes"], ascending=False).reset_index(
+            drop=True)
 
         return nan_table
 
-    def remove_nan(self):
-        percentage = (self.df.isna().sum().sum()/self.df.shape[0])*100
-        columns_to_delete = [col for col in self.df.columns if col not in "Electric range (km)" and percentage[col] >= 40]
-        self.df.drop(columns = columns_to_delete, inplace = True)
+    def remove_train_nan(self):
+        percentage = (self.train.isna().sum().sum() / self.train.shape[0]) * 100
+        self.columns_to_delete = [col for col in self.train.columns if
+                             col not in "Electric range (km)" and percentage[col] >= 40]
+        self.train.drop(columns=self.columns_to_delete, inplace=True)
 
-    def get_variable_correlation(self, variable):
-        correlation_vector = self.df[self.col_numericals].corr()[variable][:]
-        correlation_vector = np.abs(correlation_vector)
-        correlation_vector = correlation_vector.sort_values(ascending=False)[1:]
+    def remove_test_nan(self):
+        self.test.drop(columns = self.columns_to_delete, inplace = True)
 
-        return(correlation_vector)
+    def get_type_list(self):
+        self.col_categoricals = self.train.select_dtypes(include=['object']).columns.to_list()
+        self.col_numericals = self.train.select_dtypes(exclude=["object"]).columns.to_list()
+        self.train["date"] = pd.to_datetime(self.train["Date of registration"])
+        self.col_numericals.remove("ID")
 
-    def impute_numerical(self):
+    def remove_train_outliers(self):
+        pass
 
-        nan_table = self.get_nan_table()
-        var_to_impute = nan_table[(nan_table['Type'] == 'Numérique')
-                                       & (nan_table["Pourcentages de valeurs manquantes"] > 0)]['Variable'].to_list()
+    def remove_test_outliers(self):
+        pass
 
-        for var in tqdm(var_to_impute):
-            index_NAN = self.df[self.df[var].isna()].index
-            var_explicatives = []
+    def impute_train_test_numerical(self):
+        var_to_impute = self.col_numericals.copy()
+        var_to_impute.remove("Electric range (km)")
+        var_to_impute.remove("Ewltp (g/km)")
 
-            correlation_vector = self.get_variable_correlation(var)
-            var_correlated = correlation_vector.index.to_list()
+        X_train, X_test = self.train[var_to_impute], self.test[var_to_impute]
 
-            if 'ID' in var_correlated:
-                var_correlated.remove("ID")
+        imputer = IterativeImputer(max_iter= 5, random_state=0)
+        imputer.fit(X_train)
 
-            for colonne in var_correlated:
-                if self.df[colonne].loc[index_NAN].isna().sum() == 0:
-                    var_explicatives.append(colonne)
-                    if len(var_explicatives) == 3:
-                        break
+        X_train_imputed = imputer.transform(X_train)
+        X_test_imputed = imputer.transform(X_test)
 
-            df_train = self.df.dropna(how='any')
+        self.train.loc[:, var_to_impute] = X_train_imputed
+        self.test.loc[:,var_to_impute] = X_test_imputed
 
-            reg = LinearRegression().fit(df_train[var_explicatives], df_train[var])
-            pred = reg.predict(self.df[var_explicatives].loc[index_NAN])
-            self.df.loc[index_NAN, var] = pred
-
-            if var == 'Fuel consumption ':
-                self.df.loc[self.df['Fuel consumption '] <= 0, 'Fuel consumption '] = 0
-
+        self.train.loc[self.train['Fuel consumption '] <= 0, 'Fuel consumption '] = 0
+        self.test.loc[self.test['Fuel consumption '] <= 0, 'Fuel consumption '] = 0
 
     def impute_categorical(self):
-        nan_table = self.get_nan_table(self.df)
-        var_to_impute = nan_table[(self.df['type'] == 'Catégorielle') and (self.df["Pourcentage de valeurs manquantes"] > 0)].columns.to_list()
+        nan_table = self.get_nan_table()
+        var_to_impute = nan_table[(self.train['type'] == 'Catégorielle') and (
+                    self.train["Pourcentage de valeurs manquantes"] > 0)].columns.to_list()
 
         for var in var_to_impute:
-            self.df[var] = self.df.groupby("Pclass", group_keys=False)[var].apply(lambda x : x.fillna(x.mode()[0]))
-
-
-
-    def clean_data(self):
-        self.get_type_list()
-        self.impute_categorical()
-        self.impute_numerical()
-        self.remove_outliers()
+            self.train[var] = self.train.groupby("Pclass", group_keys=False)[var].apply(lambda x: x.fillna(x.mode()[0]))
