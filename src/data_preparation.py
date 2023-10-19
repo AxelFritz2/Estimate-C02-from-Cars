@@ -6,6 +6,7 @@ from tqdm import tqdm
 from sklearn.linear_model import LinearRegression
 
 
+
 class DataPreparation:
     def __init__(self, train, test):
         self.train = train.copy()
@@ -40,22 +41,24 @@ class DataPreparation:
     def remove_test_nan(self):
         self.test.drop(columns = self.columns_to_delete, inplace = True)
 
-    def get_type_list(self):
-        self.col_categoricals = self.train.select_dtypes(include=['object']).columns.to_list()
-        self.col_numericals = self.train.select_dtypes(exclude=["object"]).columns.to_list()
-        self.train["date"] = pd.to_datetime(self.train["Date of registration"])
-        self.col_numericals.remove("ID")
-
     def remove_train_outliers(self):
         pass
 
     def remove_test_outliers(self):
         pass
 
+    def get_type_list(self):
+        self.col_categoricals = self.train.select_dtypes(include=['object']).columns.to_list()
+        self.col_numericals = self.train.select_dtypes(exclude=["object"]).columns.to_list()
+        self.train["date"] = pd.to_datetime(self.train["Date of registration"])
+        self.col_numericals.remove("ID")
+
     def impute_train_test_numerical(self):
+        #Imputation of all numerical features except Eletric Range and Fuel Consumption
         var_to_impute = self.col_numericals.copy()
         var_to_impute.remove("Electric range (km)")
         var_to_impute.remove("Ewltp (g/km)")
+        var_to_impute.remove("Fuel consumption ")
 
         X_train, X_test = self.train[var_to_impute], self.test[var_to_impute]
 
@@ -67,6 +70,26 @@ class DataPreparation:
 
         self.train.loc[:, var_to_impute] = X_train_imputed
         self.test.loc[:,var_to_impute] = X_test_imputed
+
+
+        #Imputation of Electric range
+        self.train['Electric range (km)'].fillna(0, inplace=True)
+        self.test['Electric range (km)'].fillna(0, inplace=True)
+
+
+        #Imputation of Fuel Consumption
+        var_explicatives = self.get_variable_correlation("Fuel consumption ")[:3]
+        df_train = self.train[var_explicatives].dropna(how='any')
+        index_NAN_train = self.train[self.train["Fuel consumption "].isna()].index
+        index_NAN_test = self.train[self.train["Fuel consumption "].isna()].index
+
+        reg = LinearRegression().fit(df_train[var_explicatives], df_train["Fuel consumption "])
+
+        pred_train = reg.predict(self.train['Fuel consumption '].loc[index_NAN_train])
+        pred_test = reg.predict(self.test['Fuel consumption '].loc[index_NAN_test])
+
+        self.train.loc[index_NAN_train, "Fuel consumption "] = pred_train
+        self.train.loc[index_NAN_test, "Fuel consumption "] = pred_test
 
         self.train.loc[self.train['Fuel consumption '] <= 0, 'Fuel consumption '] = 0
         self.test.loc[self.test['Fuel consumption '] <= 0, 'Fuel consumption '] = 0
