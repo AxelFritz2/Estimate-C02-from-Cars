@@ -78,18 +78,24 @@ class DataPreparation:
 
 
         #Imputation of Fuel Consumption
-        var_explicatives = self.get_variable_correlation("Fuel consumption ")[:3]
-        df_train = self.train[var_explicatives].dropna(how='any')
+        var_explicatives = self.get_variable_correlation("Fuel consumption ").index.to_list()
+        var_explicatives.remove("Ewltp (g/km)")
+        var_explicatives = var_explicatives[:3]
+
+        var_full = var_explicatives.copy()
+        var_full.append('Fuel consumption ')
+
+        df_train = self.train[var_full].dropna(how='any')
         index_NAN_train = self.train[self.train["Fuel consumption "].isna()].index
-        index_NAN_test = self.train[self.train["Fuel consumption "].isna()].index
+        index_NAN_test = self.test[self.test["Fuel consumption "].isna()].index
 
         reg = LinearRegression().fit(df_train[var_explicatives], df_train["Fuel consumption "])
 
-        pred_train = reg.predict(self.train['Fuel consumption '].loc[index_NAN_train])
-        pred_test = reg.predict(self.test['Fuel consumption '].loc[index_NAN_test])
+        pred_train = reg.predict(self.train.loc[index_NAN_train, var_explicatives])
+        pred_test = reg.predict(self.test.loc[index_NAN_test, var_explicatives])
 
         self.train.loc[index_NAN_train, "Fuel consumption "] = pred_train
-        self.train.loc[index_NAN_test, "Fuel consumption "] = pred_test
+        self.test.loc[index_NAN_test, "Fuel consumption "] = pred_test
 
         self.train.loc[self.train['Fuel consumption '] <= 0, 'Fuel consumption '] = 0
         self.test.loc[self.test['Fuel consumption '] <= 0, 'Fuel consumption '] = 0
