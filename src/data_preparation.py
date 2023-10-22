@@ -2,9 +2,12 @@ import pandas as pd
 import numpy as np
 from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer
-from tqdm import tqdm
 from sklearn.linear_model import LinearRegression
+from sklearn.exceptions import ConvergenceWarning
+import warnings
 
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.simplefilter("ignore", category=ConvergenceWarning)
 
 
 class DataPreparation:
@@ -33,19 +36,21 @@ class DataPreparation:
         return nan_table
 
     def remove_train_nan(self):
-        percentage = (self.train.isna().sum().sum() / self.train.shape[0]) * 100
+        percentage = (self.train.isna().sum() / self.train.shape[0]) * 100
         self.columns_to_delete = [col for col in self.train.columns if
-                             col not in "Electric range (km)" and percentage[col] >= 40]
+                                  col != "Electric range (km)" and percentage[col] >= 40]
+        self.columns_to_delete.extend(["r", "Status"])
         self.train.drop(columns=self.columns_to_delete, inplace=True)
+        print("Valeurs manquantes du train supprimées ✅")
 
     def remove_test_nan(self):
-        self.test.drop(columns = self.columns_to_delete, inplace = True)
+        self.test.drop(columns=self.columns_to_delete, inplace=True)
+        print("Valeurs manquantes du test supprimées ✅")
 
-    def remove_train_outliers(self):
-        pass
-
-    def remove_test_outliers(self):
-        pass
+    def remove_train_test_outliers(self):
+        self.train = self.train.loc[self.train["W (mm)"] >= 1500]
+        self.test = self.test.loc[self.test["W (mm)"] >= 1500]
+        print("Outliers traités ✅")
 
     def get_type_list(self):
         self.col_categoricals = self.train.select_dtypes(include=['object']).columns.to_list()
@@ -54,7 +59,7 @@ class DataPreparation:
         self.col_numericals.remove("ID")
 
     def impute_train_test_numerical(self):
-        #Imputation of all numerical features except Eletric Range and Fuel Consumption
+        # Imputation of all numerical features except Eletric Range and Fuel Consumption
         var_to_impute = self.col_numericals.copy()
         var_to_impute.remove("Electric range (km)")
         var_to_impute.remove("Ewltp (g/km)")
@@ -62,22 +67,20 @@ class DataPreparation:
 
         X_train, X_test = self.train[var_to_impute], self.test[var_to_impute]
 
-        imputer = IterativeImputer(max_iter= 5, random_state=0)
+        imputer = IterativeImputer(max_iter=5, random_state=0)
         imputer.fit(X_train)
 
         X_train_imputed = imputer.transform(X_train)
         X_test_imputed = imputer.transform(X_test)
 
         self.train.loc[:, var_to_impute] = X_train_imputed
-        self.test.loc[:,var_to_impute] = X_test_imputed
+        self.test.loc[:, var_to_impute] = X_test_imputed
 
-
-        #Imputation of Electric range
+        # Imputation of Electric range
         self.train['Electric range (km)'].fillna(0, inplace=True)
         self.test['Electric range (km)'].fillna(0, inplace=True)
 
-
-        #Imputation of Fuel Consumption
+        # Imputation of Fuel Consumption
         var_explicatives = self.get_variable_correlation("Fuel consumption ").index.to_list()
         var_explicatives.remove("Ewltp (g/km)")
         var_explicatives = var_explicatives[:3]
@@ -100,10 +103,21 @@ class DataPreparation:
         self.train.loc[self.train['Fuel consumption '] <= 0, 'Fuel consumption '] = 0
         self.test.loc[self.test['Fuel consumption '] <= 0, 'Fuel consumption '] = 0
 
+        print("Valeurs manquantes numériques imputées ✅")
+
     def impute_categorical(self):
         nan_table = self.get_nan_table()
         var_to_impute = nan_table[(self.train['type'] == 'Catégorielle') and (
-                    self.train["Pourcentage de valeurs manquantes"] > 0)].columns.to_list()
+                self.train["Pourcentage de valeurs manquantes"] > 0)].columns.to_list()
 
         for var in var_to_impute:
             self.train[var] = self.train.groupby("Pclass", group_keys=False)[var].apply(lambda x: x.fillna(x.mode()[0]))
+
+    def prepare_data(self):
+        self.remove_train_nan()
+        self.remove_test_nan()
+        self.remove_train_test_outliers()
+        self.get_type_list()
+        self.impute_train_test_numerical()
+        return self.train, self.test
+
