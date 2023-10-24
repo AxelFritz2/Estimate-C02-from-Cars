@@ -152,3 +152,78 @@ class DataAnalysis():
         outliers_df.reset_index(inplace=True, drop=True)
 
         return (outliers_df)
+
+    def impute_train_test_numerical(self):
+        # Imputation of all numerical features except Eletric Range and Fuel Consumption
+        var_to_impute = self.col_numericals.copy()
+        var_to_impute.remove("Electric range (km)")
+        var_to_impute.remove("Ewltp (g/km)")
+        var_to_impute.remove("Fuel consumption ")
+
+        X_train, X_test = self.train[var_to_impute], self.test[var_to_impute]
+
+        imputer = IterativeImputer(max_iter=5, random_state=0)
+        imputer.fit(X_train)
+
+        X_train_imputed = imputer.transform(X_train)
+        X_test_imputed = imputer.transform(X_test)
+
+        self.train.loc[:, var_to_impute] = X_train_imputed
+        self.test.loc[:, var_to_impute] = X_test_imputed
+
+        # Imputation of Electric range
+        self.train['Electric range (km)'].fillna(0, inplace=True)
+        self.test['Electric range (km)'].fillna(0, inplace=True)
+
+        # Imputation of Fuel Consumption
+        var_explicatives = self.get_variable_correlation("Fuel consumption ").index.to_list()
+        var_explicatives.remove("Ewltp (g/km)")
+        var_explicatives = var_explicatives[:3]
+
+        var_full = var_explicatives.copy()
+        var_full.append('Fuel consumption ')
+
+        df_train = self.train[var_full].dropna(how='any')
+        index_NAN_train = self.train[self.train["Fuel consumption "].isna()].index
+        index_NAN_test = self.test[self.test["Fuel consumption "].isna()].index
+
+        reg = LinearRegression().fit(df_train[var_explicatives], df_train["Fuel consumption "])
+
+        pred_train = reg.predict(self.train.loc[index_NAN_train, var_explicatives])
+        pred_test = reg.predict(self.test.loc[index_NAN_test, var_explicatives])
+
+        self.train.loc[index_NAN_train, "Fuel consumption "] = pred_train
+        self.test.loc[index_NAN_test, "Fuel consumption "] = pred_test
+
+        self.train.loc[self.train['Fuel consumption '] <= 0, 'Fuel consumption '] = 0
+        self.test.loc[self.test['Fuel consumption '] <= 0, 'Fuel consumption '] = 0
+
+        print("Valeurs manquantes numériques imputées ✅")
+
+    def categorical_imputation(self):
+
+        #drop de It car trop de nan ------------------------------------------------------------------------------------
+        self.df.drop(columns = ['IT'], inplace = True)
+
+        # Imputation 'VFN' avec 'Cn' -----------------------------------------------------------------------------------
+        mode_VFN = self.df.groupby('Cn')['VFN'].apply(lambda x: x.mode().iloc[0] if not x.mode().empty else None)
+        self.df['VFN'] = self.df['VFN'].fillna(self.df['Cn'].map(mode_VFN))
+
+        # Impute 'VFN' with 'Va' if 'Cn' is missing
+        self.df['VFN'] = self.df.apply(lambda row: row['Va'] if pd.isna(row['VFN']) and not pd.isna(row['Cn']) else row['VFN'],
+                             axis=1)
+
+        # Impute 'VFN' with mode of 'VFN' if both 'Cn' and 'Va' are missing
+        mode_VFN = self.df['VFN'].mode().iloc[0]
+        self.df['VFN'].fillna(mode_VFN, inplace=True)
+
+        # Imputation de Mp ---------------------------------------------------------------------------------------------
+        for col in ['Mk', 'Mh', 'Man', 'Cn', 'Tan']:
+            mode_by_group = self.df.groupby(col)['Mp'].transform(
+                lambda x: x.mode().iloc[0] if not x.mode().empty else None)
+
+            # Remplace les valeurs manquantes par le mode correspondant
+            self.df['Mp'].fillna(mode_by_group, inplace=True)
+        # Remplace les valeurs manquantes restantes dans 'Mp' par le mode global de 'Mp'
+        global_mode = self.df['Mp'].mode().iloc[0]
+        self.df['Mp'].fillna(global_mode, inplace=True)
