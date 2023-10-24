@@ -39,7 +39,7 @@ class DataPreparation:
         percentage = (self.train.isna().sum() / self.train.shape[0]) * 100
         self.columns_to_delete = [col for col in self.train.columns if
                                   col != "Electric range (km)" and percentage[col] >= 40]
-        self.columns_to_delete.extend(["r", "Status"])
+        self.columns_to_delete.extend(["r", "Status", "IT"])
         self.train.drop(columns=self.columns_to_delete, inplace=True)
         print("Valeurs manquantes du train supprimées ✅")
 
@@ -105,13 +105,54 @@ class DataPreparation:
 
         print("Valeurs manquantes numériques imputées ✅")
 
-    def impute_categorical(self):
-        nan_table = self.get_nan_table()
-        var_to_impute = nan_table[(self.train['type'] == 'Catégorielle') and (
-                self.train["Pourcentage de valeurs manquantes"] > 0)].columns.to_list()
+    def impute_train_test_categorical(self):
+        # Imputation 'VFN' avec 'Cn'
+        mode_VFN_train = self.train.groupby('Cn')['VFN'].apply(lambda x: x.mode().iloc[0] if not x.mode().empty else None)
+        self.train['VFN'] = self.train['VFN'].fillna(self.train['Cn'].map(mode_VFN_train))
 
-        for var in var_to_impute:
-            self.train[var] = self.train.groupby("Pclass", group_keys=False)[var].apply(lambda x: x.fillna(x.mode()[0]))
+        mode_VFN_test = self.test.groupby('Cn')['VFN'].apply(lambda x: x.mode().iloc[0] if not x.mode().empty else None)
+        self.test['VFN'] = self.test['VFN'].fillna(self.test['Cn'].map(mode_VFN_test))
+
+        # Impute 'VFN' with 'Va' if 'Cn' is missing
+        self.train['VFN'] = self.train.apply(
+            lambda row: row['Va'] if pd.isna(row['VFN']) and not pd.isna(row['Cn']) else row['VFN'],
+            axis=1)
+
+        self.test['VFN'] = self.test.apply(
+            lambda row: row['Va'] if pd.isna(row['VFN']) and not pd.isna(row['Cn']) else row['VFN'],
+            axis=1)
+
+        ## Pas besoin simplement d'un simple fillna ?
+
+        # Impute 'VFN' with mode of 'VFN' if both 'Cn' and 'Va' are missing
+        mode_VFN_train = self.train['VFN'].mode().iloc[0]
+        self.train['VFN'].fillna(mode_VFN_train, inplace=True)
+
+        mode_VFN_test = self.test['VFN'].mode().iloc[0]
+        self.test['VFN'].fillna(mode_VFN_test, inplace=True)
+
+        # Imputation de Mp
+        for col in ['Mk', 'Mh', 'Man', 'Cn', 'Tan']:
+            mode_by_group_train = self.train.groupby(col)['Mp'].transform(
+                lambda x: x.mode().iloc[0] if not x.mode().empty else None)
+
+            mode_by_group_test = self.test.groupby(col)['Mp'].transform(
+                lambda x: x.mode().iloc[0] if not x.mode().empty else None)
+
+            self.train['Mp'].fillna(mode_by_group_train, inplace=True)
+            self.test['Mp'].fillna(mode_by_group_test, inplace=True)
+
+        # Remplace les valeurs manquantes restantes dans 'Mp' par le mode global de 'Mp'
+        global_mode_train = self.train['Mp'].mode().iloc[0]
+        self.train['Mp'].fillna(global_mode_train, inplace=True)
+
+        global_mode_test = self.test['Mp'].mode().iloc[0]
+        self.test['Mp'].fillna(global_mode_test, inplace=True)
+
+        self.train = self.train.dropna(how='any')
+        self.test = self.test.dropna(how='any')
+
+        print("Valeurs manquantes catégorielles imputées ✅")
 
     def prepare_data(self):
         self.remove_train_nan()
@@ -119,5 +160,6 @@ class DataPreparation:
         self.remove_train_test_outliers()
         self.get_type_list()
         self.impute_train_test_numerical()
+        self.impute_train_test_categorical()
         return self.train, self.test
 
