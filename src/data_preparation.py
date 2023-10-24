@@ -149,15 +149,11 @@ class DataPreparation:
         global_mode_test = self.test['Mp'].mode().iloc[0]
         self.test['Mp'].fillna(global_mode_test, inplace=True)
 
-        self.train = self.train.dropna(how='any')
-        self.test = self.test.dropna(how='any')
-
         print("Valeurs manquantes catégorielles imputées ✅")
 
     def prepare_data(self):
         self.remove_train_nan()
         self.remove_test_nan()
-        self.remove_train_test_outliers()
         self.get_type_list()
         self.impute_train_test_numerical()
         self.impute_train_test_categorical()
