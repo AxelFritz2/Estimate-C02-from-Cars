@@ -39,7 +39,7 @@ class DataPreparation:
         percentage = (self.train.isna().sum() / self.train.shape[0]) * 100
         self.columns_to_delete = [col for col in self.train.columns if
                                   col != "Electric range (km)" and percentage[col] >= 40]
-        self.columns_to_delete.extend(["r", "Status", "IT","Mp"])
+        self.columns_to_delete.extend(["r", "Status", "IT", 'Date of registration', "Mp"])
         self.train.drop(columns=self.columns_to_delete, inplace=True)
         print("Valeurs manquantes du train supprimées ✅")
 
@@ -47,23 +47,22 @@ class DataPreparation:
         self.test.drop(columns=self.columns_to_delete, inplace=True)
         print("Valeurs manquantes du test supprimées ✅")
 
-    def remove_train_test_outliers(self):
-        self.train = self.train.loc[self.train["W (mm)"] >= 1500]
-        self.test = self.test.loc[self.test["W (mm)"] >= 1500]
-        print("Outliers traités ✅")
+    def rename_columns(self):
+        self.train.columns = self.train.columns.str.replace(' ', '_')
+        self.test.columns = self.test.columns.str.replace(' ', '_')
+        print("Variables renommées ✅")
 
     def get_type_list(self):
         self.col_categoricals = self.train.select_dtypes(include=['object']).columns.to_list()
         self.col_numericals = self.train.select_dtypes(exclude=["object"]).columns.to_list()
-        self.train["date"] = pd.to_datetime(self.train["Date of registration"])
         self.col_numericals.remove("ID")
 
     def impute_train_test_numerical(self):
         # Imputation of all numerical features except Eletric Range and Fuel Consumption
         var_to_impute = self.col_numericals.copy()
-        var_to_impute.remove("Electric range (km)")
-        var_to_impute.remove("Ewltp (g/km)")
-        var_to_impute.remove("Fuel consumption ")
+        var_to_impute.remove("Electric_range_(km)")
+        var_to_impute.remove("Ewltp_(g/km)")
+        var_to_impute.remove("Fuel_consumption_")
 
         X_train, X_test = self.train[var_to_impute], self.test[var_to_impute]
 
@@ -77,39 +76,40 @@ class DataPreparation:
         self.test.loc[:, var_to_impute] = X_test_imputed
 
         # Imputation of Electric range
-        self.train['Electric range (km)'].fillna(0, inplace=True)
-        self.test['Electric range (km)'].fillna(0, inplace=True)
+        self.train['Electric_range_(km)'].fillna(0, inplace=True)
+        self.test['Electric_range_(km)'].fillna(0, inplace=True)
 
         # Imputation of Fuel Consumption
-        var_explicatives = self.get_variable_correlation("Fuel consumption ").index.to_list()
-        var_explicatives.remove("Ewltp (g/km)")
+        var_explicatives = self.get_variable_correlation("Fuel_consumption_").index.to_list()
+        var_explicatives.remove("Ewltp_(g/km)")
         var_explicatives = var_explicatives[:3]
 
         var_full = var_explicatives.copy()
-        var_full.append('Fuel consumption ')
+        var_full.append('Fuel_consumption_')
 
         df_train = self.train[var_full].dropna(how='any')
-        index_NAN_train = self.train[self.train["Fuel consumption "].isna()].index
-        index_NAN_test = self.test[self.test["Fuel consumption "].isna()].index
+        index_NAN_train = self.train[self.train["Fuel_consumption_"].isna()].index
+        index_NAN_test = self.test[self.test["Fuel_consumption_"].isna()].index
 
-        reg = LinearRegression().fit(df_train[var_explicatives], df_train["Fuel consumption "])
+        reg = LinearRegression().fit(df_train[var_explicatives], df_train["Fuel_consumption_"])
 
         pred_train = reg.predict(self.train.loc[index_NAN_train, var_explicatives])
         pred_test = reg.predict(self.test.loc[index_NAN_test, var_explicatives])
 
-        self.train.loc[index_NAN_train, "Fuel consumption "] = pred_train
-        self.test.loc[index_NAN_test, "Fuel consumption "] = pred_test
+        self.train.loc[index_NAN_train, "Fuel_consumption_"] = pred_train
+        self.test.loc[index_NAN_test, "Fuel_consumption_"] = pred_test
 
-        self.train.loc[self.train['Fuel consumption '] <= 0, 'Fuel consumption '] = 0
-        self.test.loc[self.test['Fuel consumption '] <= 0, 'Fuel consumption '] = 0
+        self.train.loc[self.train['Fuel_consumption_'] <= 0, 'Fuel_consumption_'] = 0
+        self.test.loc[self.test['Fuel_consumption_'] <= 0, 'Fuel_consumption_'] = 0
 
         print("Valeurs manquantes numériques imputées ✅")
 
     def impute_train_test_categorical(self):
-        # imputation 'Cn'-------------------------------------------------------------------------------------------------
+        #Imputation of 'Cn'
         mode_VFN_train = self.train.groupby('T')['Cn'].apply(
             lambda x: x.mode().iloc[0] if not x.mode().empty else None)
         self.train['Cn'] = self.train['Cn'].fillna(self.train['T'].map(mode_VFN_train))
+
         mode_VFN_test = self.test.groupby('T')['Cn'].apply(
             lambda x: x.mode().iloc[0] if not x.mode().empty else None)
         self.test['Cn'] = self.test['Cn'].fillna(self.test['T'].map(mode_VFN_test))
@@ -118,7 +118,9 @@ class DataPreparation:
         self.train['Cn'].fillna(self.train['Cn'].mode()[0], inplace=True)
 
         self.test['Cn'].fillna(self.test['Cn'].mode()[0], inplace=True)
-        # Imputation 'VFN' ---------------------------------------------------------------------------------------------
+
+
+        # Imputation of 'VFN'
         mode_VFN_train = self.train.groupby('Cn')['VFN'].apply(lambda x: x.mode().iloc[0] if not x.mode().empty else None)
         self.train['VFN'] = self.train['VFN'].fillna(self.train['Cn'].map(mode_VFN_train))
 
@@ -133,24 +135,25 @@ class DataPreparation:
         self.test['VFN'] = self.test.apply(
             lambda row: row['Va'] if pd.isna(row['VFN']) and not pd.isna(row['Cn']) else row['VFN'],
             axis=1)
+
         # Impute 'VFN' with mode of 'VFN' if both 'Cn' and 'Va' are missing
         self.train['VFN'].fillna(self.train['VFN'].mode()[0], inplace=True)
 
         self.test['VFN'].fillna(self.test['VFN'].mode()[0], inplace=True)
-        # drop de 'date of registration'--------------------------------------------------------------------------------
-        self.train.drop(columns = 'Date of registration', inplace = True)
-        self.test.drop(columns='Date of registration', inplace=True)
-        # Imputation des variables ayant moins de 1% de NaN-------------------------------------------------------------
+
+        # Imputation des variables ayant moins de 1% de NaN
         for col in ['Tan', 'T', 'Va', 'Ve', 'Mk', 'Ct', 'Fm']:
             self.train[col].fillna(self.train[col].mode()[0],inplace=True)
             self.test[col].fillna(self.train[col].mode()[0], inplace=True)
+
         print("Valeurs manquantes catégorielles imputées ✅")
 
     def prepare_data(self):
         self.remove_train_nan()
         self.remove_test_nan()
-        self.remove_train_test_outliers()
+        self.rename_columns()
         self.get_type_list()
         self.impute_train_test_numerical()
         self.impute_train_test_categorical()
         return self.train, self.test
+
