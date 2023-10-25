@@ -110,7 +110,6 @@ class DataPreparation:
         mode_VFN_train = self.train.groupby('T')['Cn'].apply(
             lambda x: x.mode().iloc[0] if not x.mode().empty else None)
         self.train['Cn'] = self.train['Cn'].fillna(self.train['T'].map(mode_VFN_train))
-
         mode_VFN_test = self.test.groupby('T')['Cn'].apply(
             lambda x: x.mode().iloc[0] if not x.mode().empty else None)
         self.test['Cn'] = self.test['Cn'].fillna(self.test['T'].map(mode_VFN_test))
@@ -119,8 +118,6 @@ class DataPreparation:
         self.train['Cn'].fillna(self.train['Cn'].mode()[0], inplace=True)
 
         self.test['Cn'].fillna(self.test['Cn'].mode()[0], inplace=True)
-
-
         # Imputation 'VFN' ---------------------------------------------------------------------------------------------
         mode_VFN_train = self.train.groupby('Cn')['VFN'].apply(lambda x: x.mode().iloc[0] if not x.mode().empty else None)
         self.train['VFN'] = self.train['VFN'].fillna(self.train['Cn'].map(mode_VFN_train))
@@ -136,21 +133,17 @@ class DataPreparation:
         self.test['VFN'] = self.test.apply(
             lambda row: row['Va'] if pd.isna(row['VFN']) and not pd.isna(row['Cn']) else row['VFN'],
             axis=1)
-
         # Impute 'VFN' with mode of 'VFN' if both 'Cn' and 'Va' are missing
         self.train['VFN'].fillna(self.train['VFN'].mode()[0], inplace=True)
 
         self.test['VFN'].fillna(self.test['VFN'].mode()[0], inplace=True)
-
         # drop de 'date of registration'--------------------------------------------------------------------------------
         self.train.drop(columns = 'Date of registration', inplace = True)
         self.test.drop(columns='Date of registration', inplace=True)
-
         # Imputation des variables ayant moins de 1% de NaN-------------------------------------------------------------
         for col in ['Tan', 'T', 'Va', 'Ve', 'Mk', 'Ct', 'Fm']:
             self.train[col].fillna(self.train[col].mode()[0],inplace=True)
             self.test[col].fillna(self.train[col].mode()[0], inplace=True)
-
         print("Valeurs manquantes catégorielles imputées ✅")
 
     def prepare_data(self):
