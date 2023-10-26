@@ -196,7 +196,7 @@ class DataPreparation:
         Returns:
             None
         """
-        # imputation 'Cn'-------------------------------------------------------------------------------------------------
+        # imputation 'Cn'
         mode_VFN_train = self.train.groupby("T")["Cn"].apply(
             lambda x: x.mode().iloc[0] if not x.mode().empty else None
         )
@@ -212,7 +212,7 @@ class DataPreparation:
 
         self.test["Cn"].fillna(self.test["Cn"].mode()[0], inplace=True)
 
-        # Imputation 'VFN' ---------------------------------------------------------------------------------------------
+        # Imputation 'VFN'
         mode_VFN_train = self.train.groupby("Cn")["VFN"].apply(
             lambda x: x.mode().iloc[0] if not x.mode().empty else None
         )
