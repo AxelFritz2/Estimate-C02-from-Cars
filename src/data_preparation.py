@@ -1,19 +1,60 @@
 import pandas as pd
 import numpy as np
-from sklearn.experimental import enable_iterative_imputer
-from sklearn.impute import IterativeImputer
-from sklearn.linear_model import LinearRegression
 from sklearn.exceptions import ConvergenceWarning
-import warnings
+import torch
+from torch.utils.data import DataLoader
+from sklearn.model_selection import train_test_split
 
+import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.simplefilter("ignore", category=ConvergenceWarning)
 
+class customdataset:
+    """
+    This module allows to convert the data into torch-readable format.
+    """
+    def __init__(self, data):
+        self.data = data
+
+    def nbr_var(self):
+        """
+        Retrieves the number of features in the dataset.
+
+        Return:
+            - nbr_var (int) : Feature's number.
+        """
+        nbr_var = self.data.shape[1]
+        return (nbr_var)
+
+
+    def __len__(self):
+        """
+        Retrieves the number of the observation in the dataset.
+
+        Return:
+            - length (int) : number of the observation
+        """
+        length = len(self.data)
+        return (length)
+
+    def __getitem__(self, idx):
+
+        if self.data.ndim == 2:  # Vérifiez si les données sont bien 2D
+            current_sample = self.data[idx, :]
+            obs = torch.tensor(current_sample, dtype=torch.float)
+
+        elif self.data.ndim == 1:  # Si les données sont 1D, traitez-les comme telles
+            current_sample = self.data[idx]
+            obs = torch.tensor([current_sample], dtype=torch.float)
+
+        return obs
 
 class DataPreparation:
-    def __init__(self, train, test):
+    def __init__(self, train, test, neural_networks = False, target = None):
         self.train = train.copy()
         self.test = test.copy()
+        self.target = target
+        self.neural_networks = neural_networks
 
     def get_variable_correlation(self, variable):
         correlation_vector = self.train[self.col_numericals].corr()[variable][:]
@@ -57,6 +98,15 @@ class DataPreparation:
         self.col_numericals = self.train.select_dtypes(exclude=["object"]).columns.to_list()
         self.col_numericals.remove("ID")
 
+    def impute_by_mean(self, var_to_impute, var_mean):
+        mean_train = self.train.groupby(var_mean)[var_to_impute].transform('mean')
+        self.train[var_to_impute].fillna(mean_train, inplace=True)
+        self.train[var_to_impute].fillna(self.train[var_to_impute].mean(), inplace=True)
+
+        mean_test = self.test.groupby(var_mean)[var_to_impute].transform('mean')
+        self.test[var_to_impute].fillna(mean_test, inplace=True)
+        self.test[var_to_impute].fillna(self.test[var_to_impute].mean(), inplace=True)
+
     def impute_train_test_numerical(self):
 
         # Imputation of Electric range
@@ -67,19 +117,6 @@ class DataPreparation:
         self.train["ec_(cm3)"].fillna(0, inplace=True)
         self.test['ec_(cm3)'].fillna(0, inplace=True)
 
-        #Imputation of Fuel Consumption
-
-        self.train.loc[(self.train["Fuel_consumption_"].isna()) & (self.train["Ft"] == 'ELECTRIC'), "Fuel_consumption_"] = 0
-        self.test.loc[(self.test["Fuel_consumption_"].isna()) & (self.test["Ft"] == 'ELECTRIC'), "Fuel_consumption_"] = 0
-
-        mean_FC_by_Cn = self.train.groupby('Cn')['Fuel_consumption_'].transform('mean')
-        self.train['Fuel_consumption_'].fillna(mean_FC_by_Cn, inplace=True)
-        self.train["Fuel_consumption_"].fillna(self.train["Fuel_consumption_"].mean(), inplace=True)
-
-        mean_FC_by_Cn = self.test.groupby('Cn')['Fuel_consumption_'].transform('mean')
-        self.test['Fuel_consumption_'].fillna(mean_FC_by_Cn, inplace=True)
-        self.test["Fuel_consumption_"].fillna(self.test["Fuel_consumption_"].mean(), inplace=True)
-
         #Imputation of Mt
         self.train.loc[self.train["Mt"].isna(), "Mt"] = self.train.loc[self.train["Mt"].isna()]["m_(kg)"]
         self.train["Mt"].fillna(self.train["Mt"].mean(), inplace=True)
@@ -87,50 +124,27 @@ class DataPreparation:
         self.test.loc[self.test["Mt"].isna(), "Mt"] = self.test.loc[self.test["Mt"].isna()]["m_(kg)"]
         self.test["Mt"].fillna(self.test["Mt"].mean(), inplace=True)
 
-        #Imputation of At1 (mm)
-        mean_At1_by_Cn = self.train.groupby('Cn')['At1_(mm)'].transform('mean')
-        self.train['At1_(mm)'].fillna(mean_At1_by_Cn, inplace=True)
-        self.train["At1_(mm)"].fillna(self.train["At1_(mm)"].mean(), inplace=True)
+        #Imputation of Fuel Consumption
 
-        mean_At1_by_Cn = self.test.groupby('Cn')['At1_(mm)'].transform('mean')
-        self.test['At1_(mm)'].fillna(mean_At1_by_Cn, inplace=True)
-        self.test["At1_(mm)"].fillna(self.test["At1_(mm)"].mean(), inplace=True)
+        self.train.loc[(self.train["Fuel_consumption_"].isna()) & (self.train["Ft"] == 'ELECTRIC'), "Fuel_consumption_"] = 0
+        self.test.loc[(self.test["Fuel_consumption_"].isna()) & (self.test["Ft"] == 'ELECTRIC'), "Fuel_consumption_"] = 0
+
+        self.impute_by_mean("Fuel_consumption_", "Cn")
+
+        #Imputation of At1 (mm)
+        self.impute_by_mean("At1_(mm)", "Cn")
 
         # Imputation of At2 (mm)
-        mean_At2_by_Cn = self.train.groupby('Cn')['At2_(mm)'].transform('mean')
-        self.train['At2_(mm)'].fillna(mean_At2_by_Cn, inplace=True)
-        self.train["At2_(mm)"].fillna(self.train["At2_(mm)"].mean(), inplace=True)
-
-        mean_At2_by_Cn = self.test.groupby('Cn')['At2_(mm)'].transform('mean')
-        self.test['At2_(mm)'].fillna(mean_At2_by_Cn, inplace=True)
-        self.test["At2_(mm)"].fillna(self.test["At2_(mm)"].mean(), inplace=True)
+        self.impute_by_mean("At2_(mm)", "Cn")
 
         #Imputation of m (kg)
-        mean_m_by_Cn = self.train.groupby('Cn')['m_(kg)'].transform('mean')
-        self.train['m_(kg)'].fillna(mean_m_by_Cn, inplace=True)
-        self.train["m_(kg)"].fillna(self.train["m_(kg)"].mean(), inplace=True)
-
-        mean_m_by_Cn = self.test.groupby('Cn')['m_(kg)'].transform('mean')
-        self.test['m_(kg)'].fillna(mean_m_by_Cn, inplace=True)
-        self.test["m_(kg)"].fillna(self.test["m_(kg)"].mean(), inplace=True)
+        self.impute_by_mean("m_(kg)", "Cn")
 
         #Imputation of W
-        mean_W_by_Cn = self.train.groupby('Cn')['W_(mm)'].transform('mean')
-        self.train['W_(mm)'].fillna(mean_W_by_Cn, inplace=True)
-        self.train["W_(mm)"].fillna(self.train["W_(mm)"].mean(), inplace=True)
-
-        mean_W_by_Cn = self.test.groupby('Cn')['W_(mm)'].transform('mean')
-        self.test['W_(mm)'].fillna(mean_W_by_Cn, inplace=True)
-        self.test["W_(mm)"].fillna(self.test["W_(mm)"].mean(), inplace=True)
+        self.impute_by_mean("W_(mm)", "Cn")
 
         #Imputation of ep
-        mean_ep_by_Cn = self.train.groupby('Cn')['ep_(KW)'].transform('mean')
-        self.train['ep_(KW)'].fillna(mean_ep_by_Cn, inplace=True)
-        self.train["ep_(KW)"].fillna(self.train["ep_(KW)"].mean(), inplace=True)
-
-        mean_ep_by_Cn = self.test.groupby('Cn')['ep_(KW)'].transform('mean')
-        self.test['ep_(KW)'].fillna(mean_ep_by_Cn, inplace=True)
-        self.test["ep_(KW)"].fillna(self.test["ep_(KW)"].mean(), inplace=True)
+        self.impute_by_mean("ep_(KW)", "Cn")
 
         print("Valeurs manquantes numériques imputées ✅")
 
@@ -176,7 +190,30 @@ class DataPreparation:
             self.train[col].fillna(self.train[col].mode()[0],inplace=True)
             self.test[col].fillna(self.train[col].mode()[0], inplace=True)
 
+        self.train.Ft = self.train.Ft.apply(lambda x: "PETROL" if x == "UNKNOWN" else x)
+        self.train["Ewltp_(g/km)"] = self.train["Ewltp_(g/km)"].apply(lambda x: 0 if x < 0 else x)
+        self.train.Ft = self.train.Ft.apply(lambda x: "NG" if x == "NG-BIOMETHANE" else x)
+        self.train.Ft = self.train.Ft.apply(
+            lambda x: "ELECTRIC/HYDROGEN" if x == "HYDROGEN" or x == "ELECTRIC" else x)
+        self.train.Ft = self.train.Ft.apply(
+            lambda x: "HYBRID" if x == "PETROL/ELECTRIC" or x == "DIESEL/ELECTRIC" else x)
+        self.train.Ft = self.train.Ft.apply(lambda x: "BIOCARB" if x == "NG" or x == "E85" or x == "LPG" else x)
+
+        self.test.Ft = self.test.Ft.apply(lambda x: "PETROL" if x == "UNKNOWN" else x)
+        self.test.Ft = self.test.Ft.apply(lambda x: "NG" if x == "NG-BIOMETHANE" else x)
+        self.test.Ft = self.test.Ft.apply(lambda x: "ELECTRIC/HYDROGEN" if x == "HYDROGEN" or x == "ELECTRIC" else x)
+        self.test.Ft = self.test.Ft.apply(
+            lambda x: "HYBRID" if x == "PETROL/ELECTRIC" or x == "DIESEL/ELECTRIC" else x)
+        self.test.Ft = self.test.Ft.apply(lambda x: "BIOCARB" if x == "NG" or x == "E85" or x == "LPG" else x)
+
         print("Valeurs manquantes catégorielles imputées ✅")
+
+    def tensor_transformation(self, X_train, y_train):
+        train_customdataset = customdataset(np.array(X_train))
+        self.train_dataloader = DataLoader(train_customdataset, batch_size=256)
+
+        target_customdataset = customdataset(np.array(y_train))
+        self.target_dataloader = DataLoader(target_customdataset, batch_size=256)
 
     def prepare_data(self):
         self.remove_train_nan()
@@ -185,5 +222,17 @@ class DataPreparation:
         self.get_type_list()
         self.impute_train_test_numerical()
         self.impute_train_test_categorical()
+
+        if self.neural_networks :
+            X = self.train[self.col_numericals].drop(columns = [self.target])
+            y = self.train[self.target]
+
+            X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=0)
+
+            self.tensor_transformation(X_train, y_train)
+            return X_train, X_val, y_train, y_val
+
         return self.train, self.test
+
+
 
