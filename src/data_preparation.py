@@ -8,53 +8,11 @@ from sklearn.model_selection import train_test_split
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.simplefilter("ignore", category=ConvergenceWarning)
-
-class customdataset:
-    """
-    This module allows to convert the data into torch-readable format.
-    """
-    def __init__(self, data):
-        self.data = data
-
-    def nbr_var(self):
-        """
-        Retrieves the number of features in the dataset.
-
-        Return:
-            - nbr_var (int) : Feature's number.
-        """
-        nbr_var = self.data.shape[1]
-        return (nbr_var)
-
-
-    def __len__(self):
-        """
-        Retrieves the number of the observation in the dataset.
-
-        Return:
-            - length (int) : number of the observation
-        """
-        length = len(self.data)
-        return (length)
-
-    def __getitem__(self, idx):
-
-        if self.data.ndim == 2:  # Vérifiez si les données sont bien 2D
-            current_sample = self.data[idx, :]
-            obs = torch.tensor(current_sample, dtype=torch.float)
-
-        elif self.data.ndim == 1:  # Si les données sont 1D, traitez-les comme telles
-            current_sample = self.data[idx]
-            obs = torch.tensor([current_sample], dtype=torch.float)
-
-        return obs
-
 class DataPreparation:
-    def __init__(self, train, test, neural_networks = False, target = None):
+    def __init__(self, train, test, target = None):
         self.train = train.copy()
         self.test = test.copy()
         self.target = target
-        self.neural_networks = neural_networks
 
     def get_variable_correlation(self, variable):
         correlation_vector = self.train[self.col_numericals].corr()[variable][:]
@@ -208,13 +166,6 @@ class DataPreparation:
 
         print("Valeurs manquantes catégorielles imputées ✅")
 
-    def tensor_transformation(self, X_train, y_train):
-        train_customdataset = customdataset(np.array(X_train))
-        self.train_dataloader = DataLoader(train_customdataset, batch_size=256)
-
-        target_customdataset = customdataset(np.array(y_train))
-        self.target_dataloader = DataLoader(target_customdataset, batch_size=256)
-
     def prepare_data(self):
         self.remove_train_nan()
         self.remove_test_nan()
@@ -222,16 +173,6 @@ class DataPreparation:
         self.get_type_list()
         self.impute_train_test_numerical()
         self.impute_train_test_categorical()
-
-        if self.neural_networks :
-            X = self.train[self.col_numericals].drop(columns = [self.target])
-            y = self.train[self.target]
-
-            X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=0)
-
-            self.tensor_transformation(X_train, y_train)
-            return X_train, X_val, y_train, y_val
-
         return self.train, self.test
 
 
