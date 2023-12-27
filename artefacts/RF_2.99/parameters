@@ -1,0 +1,1 @@
+{"Model": "RandomForest", "N_ESTIMATORS": 100, "MAX_DEPTH": 20, "N_ITERATION": 100, "MAE": 2.9940168319148577}

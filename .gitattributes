@@ -1,0 +1,4 @@
+artefacts filter=lfs diff=lfs merge=lfs -text
+artefacts/RF_2.99/RF.joblib filter=lfs diff=lfs merge=lfs -text
+artefacts/RL_13.13/model_RL.joblib filter=lfs diff=lfs merge=lfs -text
+artefacts/XGB_2.91/XGB.joblib filter=lfs diff=lfs merge=lfs -text

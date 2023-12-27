@@ -1,0 +1,1 @@
+{"Model": "XGBoost", "N_ESTIMATORS": 500, "MAX_DEPTH": 30}
