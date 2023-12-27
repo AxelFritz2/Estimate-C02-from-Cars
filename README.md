@@ -2,6 +2,8 @@
 
 Ce challenge kaggle vise à prédire les émissions de dioxyde de carbone (CO2) des véhicules en utilisant un ensemble de données comprenant des informations détaillées sur divers aspects des véhicules.
 
+Les données utilisées dans le cadre de ce challenge sont disponibles à cette adresse: 
+[Estimate CO2 from cars](https://www.kaggle.com/competitions/estimate-co2-emissions-from-cars)
 ## Installation
 
 Pour garantir un environnement de développement isolé, nous vous recommandons d'utiliser un environnement virtuel (venv). Suivez ces étapes pour créer votre environnement virtuel et installer les dépendances du projet :
