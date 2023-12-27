@@ -1,18 +1,69 @@
-import pandas as pd
-import numpy as np
-from sklearn.exceptions import ConvergenceWarning
-import torch
-from torch.utils.data import DataLoader
-from sklearn.model_selection import train_test_split
-
 import warnings
+
+import numpy as np
+import pandas as pd
+import torch
+from sklearn.exceptions import ConvergenceWarning
+from sklearn.model_selection import train_test_split
+from torch.utils.data import DataLoader
+
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.simplefilter("ignore", category=ConvergenceWarning)
+
+
+class customdataset:
+    """
+    This module allows to convert the data into torch-readable format.
+    """
+
+    def __init__(self, data):
+        self.data = data
+
+    def nbr_var(self):
+        """
+        Retrieves the number of features in the dataset.
+
+        Return:
+            - nbr_var (int) : Feature's number.
+        """
+        nbr_var = self.data.shape[1]
+        return (nbr_var)
+
+    def __len__(self):
+        """
+        Retrieves the number of the observation in the dataset.
+
+        Return:
+            - length (int) : number of the observation
+        """
+        length = len(self.data)
+        return (length)
+
+    def __getitem__(self, idx):
+
+        if self.data.ndim == 2:  # Vérifiez si les données sont bien 2D
+            current_sample = self.data[idx, :]
+            obs = torch.tensor(current_sample, dtype=torch.float)
+
+        elif self.data.ndim == 1:  # Si les données sont 1D, traitez-les comme telles
+            current_sample = self.data[idx]
+            obs = torch.tensor([current_sample], dtype=torch.float)
+
+        return obs
+
+
+import warnings
+
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.simplefilter("ignore", category=ConvergenceWarning)
+
+
 class DataPreparation:
-    def __init__(self, train, test, target = None):
+    def __init__(self, train, test, target=None, neural_networks=False):
         self.train = train.copy()
         self.test = test.copy()
         self.target = target
+        self.neural_networks = neural_networks
 
     def get_variable_correlation(self, variable):
         correlation_vector = self.train[self.col_numericals].corr()[variable][:]
@@ -75,39 +126,41 @@ class DataPreparation:
         self.train["ec_(cm3)"].fillna(0, inplace=True)
         self.test['ec_(cm3)'].fillna(0, inplace=True)
 
-        #Imputation of Mt
+        # Imputation of Mt
         self.train.loc[self.train["Mt"].isna(), "Mt"] = self.train.loc[self.train["Mt"].isna()]["m_(kg)"]
         self.train["Mt"].fillna(self.train["Mt"].mean(), inplace=True)
 
         self.test.loc[self.test["Mt"].isna(), "Mt"] = self.test.loc[self.test["Mt"].isna()]["m_(kg)"]
         self.test["Mt"].fillna(self.test["Mt"].mean(), inplace=True)
 
-        #Imputation of Fuel Consumption
+        # Imputation of Fuel Consumption
 
-        self.train.loc[(self.train["Fuel_consumption_"].isna()) & (self.train["Ft"] == 'ELECTRIC'), "Fuel_consumption_"] = 0
-        self.test.loc[(self.test["Fuel_consumption_"].isna()) & (self.test["Ft"] == 'ELECTRIC'), "Fuel_consumption_"] = 0
+        self.train.loc[
+            (self.train["Fuel_consumption_"].isna()) & (self.train["Ft"] == 'ELECTRIC'), "Fuel_consumption_"] = 0
+        self.test.loc[
+            (self.test["Fuel_consumption_"].isna()) & (self.test["Ft"] == 'ELECTRIC'), "Fuel_consumption_"] = 0
 
         self.impute_by_mean("Fuel_consumption_", "Cn")
 
-        #Imputation of At1 (mm)
+        # Imputation of At1 (mm)
         self.impute_by_mean("At1_(mm)", "Cn")
 
         # Imputation of At2 (mm)
         self.impute_by_mean("At2_(mm)", "Cn")
 
-        #Imputation of m (kg)
+        # Imputation of m (kg)
         self.impute_by_mean("m_(kg)", "Cn")
 
-        #Imputation of W
+        # Imputation of W
         self.impute_by_mean("W_(mm)", "Cn")
 
-        #Imputation of ep
+        # Imputation of ep
         self.impute_by_mean("ep_(KW)", "Cn")
 
         print("Valeurs manquantes numériques imputées ✅")
 
     def impute_train_test_categorical(self):
-        #Imputation of 'Cn'
+        # Imputation of 'Cn'
         mode_VFN_train = self.train.groupby('T')['Cn'].apply(
             lambda x: x.mode().iloc[0] if not x.mode().empty else None)
         self.train['Cn'] = self.train['Cn'].fillna(self.train['T'].map(mode_VFN_train))
@@ -121,9 +174,9 @@ class DataPreparation:
 
         self.test['Cn'].fillna(self.test['Cn'].mode()[0], inplace=True)
 
-
         # Imputation of 'VFN'
-        mode_VFN_train = self.train.groupby('Cn')['VFN'].apply(lambda x: x.mode().iloc[0] if not x.mode().empty else None)
+        mode_VFN_train = self.train.groupby('Cn')['VFN'].apply(
+            lambda x: x.mode().iloc[0] if not x.mode().empty else None)
         self.train['VFN'] = self.train['VFN'].fillna(self.train['Cn'].map(mode_VFN_train))
 
         mode_VFN_test = self.test.groupby('Cn')['VFN'].apply(lambda x: x.mode().iloc[0] if not x.mode().empty else None)
@@ -145,7 +198,7 @@ class DataPreparation:
 
         # Imputation des variables ayant moins de 1% de NaN
         for col in ['Tan', 'T', 'Va', 'Ve', 'Mk', 'Ct', 'Fm']:
-            self.train[col].fillna(self.train[col].mode()[0],inplace=True)
+            self.train[col].fillna(self.train[col].mode()[0], inplace=True)
             self.test[col].fillna(self.train[col].mode()[0], inplace=True)
 
         self.train.Ft = self.train.Ft.apply(lambda x: "PETROL" if x == "UNKNOWN" else x)
@@ -166,6 +219,13 @@ class DataPreparation:
 
         print("Valeurs manquantes catégorielles imputées ✅")
 
+    def tensor_transformation(self, X_train, y_train):
+        train_customdataset = customdataset(np.array(X_train))
+        self.train_dataloader = DataLoader(train_customdataset, batch_size=256)
+
+        target_customdataset = customdataset(np.array(y_train))
+        self.target_dataloader = DataLoader(target_customdataset, batch_size=256)
+
     def prepare_data(self):
         self.remove_train_nan()
         self.remove_test_nan()
@@ -173,7 +233,14 @@ class DataPreparation:
         self.get_type_list()
         self.impute_train_test_numerical()
         self.impute_train_test_categorical()
+
+        if self.neural_networks:
+            X = self.train[self.col_numericals].drop(columns=[self.target])
+            y = self.train[self.target]
+
+            X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=0)
+
+            self.tensor_transformation(X_train, y_train)
+            return X_train, X_val, y_train, y_val
+
         return self.train, self.test
-
-
-
