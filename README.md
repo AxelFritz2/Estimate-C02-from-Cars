@@ -37,9 +37,9 @@ pip install -r requirements.txt
 
 ## Structure du Projet
 
-- **src**: Les sources du projet, ce dossier comprend le scripts de prétraitement des données.
+- **src**: Les sources du projet, ce dossier comprend le script de prétraitement des données.
 - **notebooks** : Ce dossier comprend les Jupyter notebooks utilisés pour l'analyse exploratoire des données et l'ensemble des modèles utilisés dans ce projet.
-- **artefacts** : Ce dossier comprend l'ensemble des artefacts (modèles et hyperparamètres) sauvegardés de façon a pouvoir être réutilisé sans les réentrainer.
+- **artefacts** : Ce dossier comprend l'ensemble des artefacts (modèles et hyperparamètres) sauvegardés de façon a pouvoir être réutilisé sans réentrainer les différents modèles.
 - **requirements**: La liste des dépendances du projet.
 
 ## Auteurs
