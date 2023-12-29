@@ -10,8 +10,8 @@ Pour garantir un environnement de développement isolé, nous vous recommandons 
 
 1. Cloner le dépôt github
 ```bash
-git clone https://github.com/VotreNom/ProjetPredictionCO2.git
-cd ProjetPredictionCO2
+git clone https://github.com/AxelFritz2/Challenge_Kaggle_Mosef.git
+cd Challenge_Kaggle_Mosef
 ```
 2. Créer l'environnement virtuel
 ```bash
